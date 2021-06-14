@@ -22,19 +22,21 @@ def main_page(prev_vars):
         for patient in results:
             dic = patient.serialize()
             name_s = ""
-            for name in dic['name'][0]['given']:
-                name_s += name + " "
+            if 'given' in dic['name'][0]:
+                for name in dic['name'][0]['given']:
+                    name_s += name + " "
             st.write(name_s + dic['name'][0]['family'])
             if st.button("Go", key=dic['id']):
-                mult.change_page(1)
+                mult.save(var_list=[int(dic['id'])], name="patient_id", page_names=["patient"])
+                mult.change_page(mult.read_page()+1)
             st.markdown("---")
 
 
 def patient_page(prev_vars):
     st.title("patient")
+    st.write(prev_vars)
     if st.button("go to main page"):
-        print("going main")
-        mult.change_page(0)
+        mult.change_page(mult.read_page()-1)
 
 
 if __name__ == "__main__":
