@@ -1,0 +1,3 @@
+[submodule "multipage_framework"]
+	path = multipage_framework
+	url = https://github.com/YanAlmeida/streamlit-multipage-framework.git
