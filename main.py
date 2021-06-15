@@ -56,13 +56,6 @@ def patient_page(prev_vars):
         patient = patient.search(_id=prev_vars)
         pat = patient.first()
 
-        pat_raw = patient.fetch_raw()
-        start_date = ""
-        end_date = ""
-
-        medication_statements = client.resources('MedicationStatement')
-        medication_statements = medication_statements.first()
-
         data_string = "## "
         if 'prefix' in pat['name'][0]:
             data_string += " ".join(pat['name'][0]['prefix']) + " "
@@ -97,7 +90,50 @@ def patient_page(prev_vars):
         obs.sort(key=sorter, reverse=True)
         for el in obs:
             if end_date >= conv(el['effectiveDateTime']).date() >= start_date:
-                st.write(el['effectiveDateTime'])
+                st.markdown(f"## Observation *{el['effectiveDateTime']}*")
+                codings = []
+                for it in el:
+                    item = el[it]
+                    if it == 'valueQuantity':
+                        codings.append(f"{item['value']} {item['unit']}")
+                    elif isinstance(item, dict):
+                        if 'coding' in item:
+                            codings.append(item['coding'][0]['display'])
+                    elif isinstance(item, list):
+                        for i in item:
+                            if isinstance(i, dict):
+                                if 'coding' in i:
+                                    codings.append(i['coding'][0]['display'])
+                cols = st.beta_columns(len(codings))
+                for i in range(len(codings)):
+                    cols[i].markdown(f"**{codings[i]}**")
+
+                obs_ref = client.reference('Observation', el['id'])
+
+                requests = client.resources('MedicationRequest')
+                requests = requests.search(encounter=el['encounter']['reference'])
+                requests = requests.search()
+                requests = requests.fetch()
+                if len(requests) > 0:
+                    st.markdown('### Medication Requests')
+                    for med in requests:
+                        if 'medicationReference' in med:
+                            st.write(med['medicationReference']['display'])
+                        elif 'medicationCodeableConcept' in med:
+                            for co in med['medicationCodeableConcept']['coding']:
+                                st.write(co['display'])
+                statements = client.resources('MedicationStatement')
+                statements = statements.search(part_of=obs_ref)
+                statements = statements.fetch()
+                if len(statements) > 0:
+                    st.markdown("### Medication Statements")
+                    for med in statements:
+                        if 'medicationReference' in med:
+                            st.write(med['medicationReference']['display'])
+                        elif 'medicationCodeableConcept' in med:
+                            for co in med['medicationCodeableConcept']['coding']:
+                                st.write(co['display'])
+                st.markdown("---")
 
     else:
         st.write("No patient selected")
