@@ -3,6 +3,7 @@ from fhirpy import SyncFHIRClient
 from streamlit.components.v1 import html as st_html
 import streamlit as st
 import multipage_framework.multipage as mult
+import datetime
 
 #HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
 HAPI_BASE_URL = "https://server.fire.ly/r4"
@@ -33,6 +34,16 @@ def main_page(prev_vars):
             st.markdown("---")
 
 
+def conv(date):
+    return datetime.datetime.fromisoformat(date)
+
+
+def sorter(e):
+    date = e['effectiveDateTime']
+    x = conv(date).strftime("%Y/%m/%d %H:%M:%S")
+    return x
+
+
 def patient_page(prev_vars):
     st.title("patient")
     if st.button("go to main page"):
@@ -45,7 +56,12 @@ def patient_page(prev_vars):
         patient = patient.search(_id=prev_vars)
         pat = patient.first()
 
-        #st.write(pat)
+        pat_raw = patient.fetch_raw()
+        start_date = ""
+        end_date = ""
+
+        medication_statements = client.resources('MedicationStatement')
+        medication_statements = medication_statements.first()
 
         data_string = "## "
         if 'prefix' in pat['name'][0]:
@@ -54,18 +70,35 @@ def patient_page(prev_vars):
         data_string += pat['name'][0]['family'] + "\n"
 
         for naming in pat['name']:
-            if naming['use'] == 'maiden':
-                data_string += f"- **Maiden name**: {naming['family']} _(till: {naming['period']['end']})_\n"
+            if 'use' in naming:
+                if naming['use'] == 'maiden':
+                    data_string += f"- **Maiden name**: {naming['family']} _(till: {naming['period']['end']})_\n"
 
         data_string += f"- **Gender**: {pat['gender']}\n"
-        for phone in pat['telecom']:
-            if 'value' in phone:
-                if phone['use'] != 'old':
-                    data_string += f"- **{phone['use'].capitalize()} phone**: {phone['value']}\n"
+        for com in pat['telecom']:
+            if 'value' in com:
+                if com['system'] == 'phone':
+                    if com['use'] != 'old':
+                        data_string += f"- **{com['use'].capitalize()} phone**: {com['value']}\n"
+                elif com['system'] == 'email':
+                    data_string += f"- **Email:** {com['value']}\n"
         data_string += f"- **Date of birth**: {pat['birthDate']}\n"
         data_string += f"- **Id**: {pat['id']}\n"
 
+        ref = client.reference('Patient', id=prev_vars)
+        observations = client.resources('Observation')
+        observations = observations.search(patient=ref)
+
         st.markdown(data_string)
+        left, right = st.beta_columns(2)
+        start_date = left.date_input('start')
+        end_date = right.date_input('end')
+        obs = observations.fetch()
+        obs.sort(key=sorter, reverse=True)
+        for el in obs:
+            if end_date >= conv(el['effectiveDateTime']).date() >= start_date:
+                st.write(el['effectiveDateTime'])
+
     else:
         st.write("No patient selected")
 
