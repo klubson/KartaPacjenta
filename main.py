@@ -4,8 +4,9 @@ from streamlit.components.v1 import html as st_html
 import streamlit as st
 import multipage_framework.multipage as mult
 
-HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
-
+#HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
+HAPI_BASE_URL = "https://server.fire.ly/r4"
+#HAPI_BASE_URL = "http://test.fhir.org/r4"
 
 def main_page(prev_vars):
     st.title("main page")
@@ -27,16 +28,46 @@ def main_page(prev_vars):
                     name_s += name + " "
             st.write(name_s + dic['name'][0]['family'])
             if st.button("Go", key=dic['id']):
-                mult.save(var_list=[int(dic['id'])], name="patient_id", page_names=["patient"])
+                mult.save(var_list=[dic['id']], name="patient_id", page_names=["patient"])
                 mult.change_page(mult.read_page()+1)
             st.markdown("---")
 
 
 def patient_page(prev_vars):
     st.title("patient")
-    st.write(prev_vars)
     if st.button("go to main page"):
         mult.change_page(mult.read_page()-1)
+    if prev_vars is not None:
+        client = SyncFHIRClient(
+            HAPI_BASE_URL
+        )
+        patient = client.resources('Patient')
+        patient = patient.search(_id=prev_vars)
+        pat = patient.first()
+
+        #st.write(pat)
+
+        data_string = "## "
+        if 'prefix' in pat['name'][0]:
+            data_string += " ".join(pat['name'][0]['prefix']) + " "
+        data_string += " ".join(pat['name'][0]['given']) + " "
+        data_string += pat['name'][0]['family'] + "\n"
+
+        for naming in pat['name']:
+            if naming['use'] == 'maiden':
+                data_string += f"- **Maiden name**: {naming['family']} _(till: {naming['period']['end']})_\n"
+
+        data_string += f"- **Gender**: {pat['gender']}\n"
+        for phone in pat['telecom']:
+            if 'value' in phone:
+                if phone['use'] != 'old':
+                    data_string += f"- **{phone['use'].capitalize()} phone**: {phone['value']}\n"
+        data_string += f"- **Date of birth**: {pat['birthDate']}\n"
+        data_string += f"- **Id**: {pat['id']}\n"
+
+        st.markdown(data_string)
+    else:
+        st.write("No patient selected")
 
 
 if __name__ == "__main__":
