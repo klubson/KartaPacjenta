@@ -5,9 +5,10 @@ import streamlit as st
 import multipage_framework.multipage as mult
 import datetime
 
-#HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
-HAPI_BASE_URL = "https://server.fire.ly/r4"
+HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
+#HAPI_BASE_URL = "https://server.fire.ly/r4"
 #HAPI_BASE_URL = "http://test.fhir.org/r4"
+
 
 def main_page(prev_vars):
     st.title("main page")
@@ -15,23 +16,35 @@ def main_page(prev_vars):
         HAPI_BASE_URL
     )
     patients = client.resources('Patient')
-    user_input = st.text_input("Name", "")
+    if prev_vars is not None:
+        user_input = prev_vars
+    else:
+        user_input = ""
+    user_input = st.text_input("Name", user_input)
+    mult.save([user_input], name='search', page_names=["main page"])
     if user_input != "":
         patients = patients.search(family__contains=user_input).sort('name')
-        results = patients.fetch()
-        st.write("Results: " + str(len(results)))
+    else:
+        patients = patients.sort('name')
+    results = patients.limit(100).fetch()
+    len = patients.count()
+    st.write("Results: " + str(len))
+    if len > 100:
+        st.write("first 100")
+    st.markdown("---")
+    for patient in results:
+        dic = patient.serialize()
+        name_s = ""
+        if 'given' in dic['name'][0]:
+            for name in dic['name'][0]['given']:
+                name_s += name + " "
+        if 'family' in dic['name'][0]:
+            name_s += dic['name'][0]['family']
+        st.write(name_s)
+        if st.button("Go", key=dic['id']):
+            mult.save(var_list=[dic['id']], name="patient_id", page_names=["patient"])
+            mult.change_page(mult.read_page()+1)
         st.markdown("---")
-        for patient in results:
-            dic = patient.serialize()
-            name_s = ""
-            if 'given' in dic['name'][0]:
-                for name in dic['name'][0]['given']:
-                    name_s += name + " "
-            st.write(name_s + dic['name'][0]['family'])
-            if st.button("Go", key=dic['id']):
-                mult.save(var_list=[dic['id']], name="patient_id", page_names=["patient"])
-                mult.change_page(mult.read_page()+1)
-            st.markdown("---")
 
 
 def conv(date):
@@ -68,13 +81,14 @@ def patient_page(prev_vars):
                     data_string += f"- **Maiden name**: {naming['family']} _(till: {naming['period']['end']})_\n"
 
         data_string += f"- **Gender**: {pat['gender']}\n"
-        for com in pat['telecom']:
-            if 'value' in com:
-                if com['system'] == 'phone':
-                    if com['use'] != 'old':
-                        data_string += f"- **{com['use'].capitalize()} phone**: {com['value']}\n"
-                elif com['system'] == 'email':
-                    data_string += f"- **Email:** {com['value']}\n"
+        if 'telecom' in pat:
+            for com in pat['telecom']:
+                if 'value' in com:
+                    if com['system'] == 'phone':
+                        if com['use'] != 'old':
+                            data_string += f"- **{com['use'].capitalize()} phone**: {com['value']}\n"
+                    elif com['system'] == 'email':
+                        data_string += f"- **Email:** {com['value']}\n"
         data_string += f"- **Date of birth**: {pat['birthDate']}\n"
         data_string += f"- **Id**: {pat['id']}\n"
 
@@ -84,13 +98,14 @@ def patient_page(prev_vars):
 
         st.markdown(data_string)
         left, right = st.beta_columns(2)
-        start_date = left.date_input('start')
-        end_date = right.date_input('end')
+        start_date = left.date_input(min_value=datetime.datetime(year=1900, month=1, day=1), label='start')
+        end_date = right.date_input(min_value=datetime.datetime(year=1900, month=1, day=1), label='end')
         obs = observations.fetch()
         obs.sort(key=sorter, reverse=True)
         for el in obs:
             if end_date >= conv(el['effectiveDateTime']).date() >= start_date:
                 st.markdown(f"## Observation *{el['effectiveDateTime']}*")
+                st.write(el['id'])
                 codings = []
                 for it in el:
                     item = el[it]
@@ -98,7 +113,8 @@ def patient_page(prev_vars):
                         codings.append(f"{item['value']} {item['unit']}")
                     elif isinstance(item, dict):
                         if 'coding' in item:
-                            codings.append(item['coding'][0]['display'])
+                            if 'display' in item['coding'][0]:
+                                codings.append(item['coding'][0]['display'])
                     elif isinstance(item, list):
                         for i in item:
                             if isinstance(i, dict):
@@ -110,18 +126,19 @@ def patient_page(prev_vars):
 
                 obs_ref = client.reference('Observation', el['id'])
 
-                requests = client.resources('MedicationRequest')
-                requests = requests.search(encounter=el['encounter']['reference'])
-                requests = requests.search()
-                requests = requests.fetch()
-                if len(requests) > 0:
-                    st.markdown('### Medication Requests')
-                    for med in requests:
-                        if 'medicationReference' in med:
-                            st.write(med['medicationReference']['display'])
-                        elif 'medicationCodeableConcept' in med:
-                            for co in med['medicationCodeableConcept']['coding']:
-                                st.write(co['display'])
+                if 'encounter' in el:
+                    requests = client.resources('MedicationRequest')
+                    requests = requests.search(encounter=el['encounter']['reference'])
+                    requests = requests.search()
+                    requests = requests.fetch()
+                    if len(requests) > 0:
+                        st.markdown('### Medication Requests')
+                        for med in requests:
+                            if 'medicationReference' in med:
+                                st.write(med['medicationReference']['display'])
+                            elif 'medicationCodeableConcept' in med:
+                                for co in med['medicationCodeableConcept']['coding']:
+                                    st.write(co['display'])
                 statements = client.resources('MedicationStatement')
                 statements = statements.search(part_of=obs_ref)
                 statements = statements.fetch()
