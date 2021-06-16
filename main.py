@@ -5,8 +5,8 @@ import streamlit as st
 import multipage_framework.multipage as mult
 import datetime
 
-HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
-#HAPI_BASE_URL = "https://server.fire.ly/r4"
+#HAPI_BASE_URL = "http://hapi.fhir.org/baseR4"
+HAPI_BASE_URL = "https://server.fire.ly/r4"
 #HAPI_BASE_URL = "http://test.fhir.org/r4"
 
 
